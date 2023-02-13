@@ -4,22 +4,20 @@ let {
     sheetLength,
     readSheet
 } = require('./Controllers/Google/copyingFunctions');
-let docDetails = require('./Controllers/PandaDoc/details');
-let downloadDoc = require('./Controllers/PandaDoc/download');
-let subscribe = require('./Controllers/PandaDoc/polling');
-let updateDoc = require('./Controllers/PandaDoc/status');
-const updateLinkedObject = require('./Controllers/PandaDoc/pandaFunctions');
+let docDetails = require('./Controllers/PandaDoc/docDetails');
+let downloadDoc = require('./Controllers/PandaDoc/downloadOldDoc');
+let Polling = require('./Controllers/PandaDoc/docStatusPolling');
+let updateDoc = require('./Controllers/PandaDoc/updateNewDocStatus');
+const updateLinkedObject = require('./Controllers/PandaDoc/updateNewDocLinkedObj');
 let {
     database,
     createDB,
     sizeFile
 } = require('./Database/entry');
-const create = require('./Controllers/PandaDoc/create');
-
-let counter = 1;
+const create = require('./Controllers/PandaDoc/createDoc.js');
 
 //Copying Functions 
-const index = async () => {
+const index = async (counter) => {
     //Loops though Folder of document's to be migrated and returns ids of Completed Documents
     let doc = await readRow(counter);
 
@@ -30,55 +28,51 @@ const index = async () => {
 
     //Store certain details of document into a json log file 
     //then create a new doc in other workspace from the downloaded PDF
-    let newDocId = await db(result);
+    let {id, owner} = await db(result);
 
     //Change status of newly created doc to Completed
-    await updateDoc(newDocId, result);
+    await updateDoc(id, result, owner);
 
     //Write ID of new doc back to spreadsheet
-    await writeColumn(newDocId, "J", counter);
+    await writeColumn(id, "J", counter);
 };
 
 const db = async (result) => {
-    let dbase = await database(result)
-        .then(data => createDB(data))
-        .catch(err => console.log(err));
-
-    let check = await sizeFile(dbase)
-        .then(res => create(res.result))
-        .then(id => subscribe(id))
-        .catch(err => console.log(err));
-
-    return check
+    try {
+        let dbase = await database(result);
+        let entry = await createDB(dbase);
+        let check = await sizeFile(entry);
+        let createDoc = await create(check.result);
+        await Polling(createDoc.id);
+        return createDoc;
+    } catch (err) {
+        console.log(err);
+    }
 };
-
 //Migration Functions
-const readEntity = async () => {
+const readEntity = async (counter) => {
     let rowDetail = await readSheet(counter);
     if ((rowDetail.provider) && (rowDetail.crmEntity === "opportunity")) {
         await updateLinkedObject(rowDetail);
         await writeColumn("Object Changed", "K", counter)
     } else {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 250));
         return
     }
 }
 
 const script = async () => {
-    let limit = await sheetLength();
+    let counter = await sheetLength();
 
-    do {
-        await index()
-        counter ++;
+    for (counter; counter >= 1; counter--) {
+        await index(counter)
         console.log(counter);
-    } while (counter <= limit);
+    }
 
-    do {
-        await readEntity()
-        counter++;
+    for (counter; counter >= 1; counter--) {
+        await readEntity(counter)
         console.log(counter)
-    } while (counter <= limit);
-
+    }
 };
 
 script();

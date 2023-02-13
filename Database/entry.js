@@ -1,6 +1,4 @@
 const fs = require('fs');
-
-
 const database = async (result) => {
     const size = checkSize();
 
@@ -33,7 +31,7 @@ const createDB = (data) => {
     return data
 }
 
-const sizeFile = (data) => {
+const sizeFile = async (data) => {
     return new Promise((resolve, reject) => {
         if (data.size < 45) {
             return resolve(data)

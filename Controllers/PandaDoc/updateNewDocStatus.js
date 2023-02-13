@@ -25,16 +25,18 @@ const setDocValue = async (newDoc, result) => {
         "amount": result.grand_total.amount,
         "currency": result.grand_total.currency
     }
-    let response = await axiosInstance.patch(`https://api.pandadoc.com/org/${organisationID}/ws/${workspaceID}/documents/${newDoc}/grand_total`, body, headersPrivate);
-    console.log(response.status)
+    await axiosInstance.patch(`https://api.pandadoc.com/org/${organisationID}/ws/${workspaceID}/documents/${newDoc}/grand_total`, body, headersPrivate);
 }
 
-const changeStatus = async (newDoc, result) => {
+const changeStatus = async (newDoc, result, owner) => {
     switch (true) {
         case (result.status === "document.voided"):
             let bodySend = {
                 subject: '',
-                silent: true
+                silent: true,
+                sender: {
+                  email: owner
+                }
             }
             await axiosInstance.post(`https://api.pandadoc.com/public/v1/documents/${newDoc}/send`, bodySend, headers);
             let bodyExpire = {
@@ -65,9 +67,9 @@ const changeStatus = async (newDoc, result) => {
     }
 }
 
-const updateDoc = async (newDoc, result) => {
+const updateDoc = async (newDoc, result, owner) => {
     await setDocValue(newDoc, result);
-    await changeStatus(newDoc, result);
+    await changeStatus(newDoc, result, owner);
 }
 
 module.exports = updateDoc;

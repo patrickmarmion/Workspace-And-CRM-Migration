@@ -1,10 +1,11 @@
 const axiosInstance = require("../../Config/axiosInstance");
-const rp = require('request-promise');
 const fs = require('fs');
+const FormData = require('form-data');
 require('dotenv').config({
     path: "../../.env"
 })
 const access_token = process.env.NEW_ACCESS_TOKEN;
+const folderId = process.env.FOLDER_ID;
 const headersNew = {
     headers: {
         'Content-Type': 'application/json',
@@ -25,12 +26,12 @@ const docOwner = async (result) => {
             let docCreator = filteredMember[0].email
             return docCreator
         } else {
-            let docCreator = "yaniv@zoomer.ca"
+            let docCreator = "patrick.marmion@pandadoc.com"
             return docCreator
         }
 }
 
-const requestBody = (owner, result) => {
+const requestBody = (result, owner) => {
     switch (true) {
         case ((result.version == 2) && (result.linked_objects.length > 0)):
             return new Promise((resolve) => {
@@ -50,6 +51,7 @@ const requestBody = (owner, result) => {
                 data = {
                     "name": `${result.name}`,
                     "recipients": recipients,
+                    "folder_uuid": folderId,
                     "owner": {
                         "email": owner
                     },
@@ -83,6 +85,7 @@ const requestBody = (owner, result) => {
                 data = {
                     "name": `${result.name}`,
                     "recipients": recipients,
+                    "folder_uuid": folderId,
                     "owner": {
                         "email": owner
                     },
@@ -100,6 +103,7 @@ const requestBody = (owner, result) => {
                 data = {
                     "name": `${result.name}`,
                     "recipients": [],
+                    "folder_uuid": folderId,
                     "metadata": {
                         "migratedDocID": result.id,
                         "migratedDocStatus": result.status
@@ -111,41 +115,35 @@ const requestBody = (owner, result) => {
     }
 }
 
-const upload = (reqBody) => {
-    return new Promise((resolve) => {
-        let body = JSON.stringify(reqBody);
-        resolve(
-            rp({
-                method: 'POST',
-                url: 'https://api.pandadoc.com/public/v1/documents/',
-                headers: {
-                    'Authorization': `Bearer ${access_token}`
-                },
-                formData: {
-                    file: {
-                        'value': fs.createReadStream('/Users/patrickmarmion/Documents/VSCode/Migrations/Workspace/panda.pdf'),
-                        'options': {
-                            'filename': 'panda.pdf',
-                            'contentType': null
-                        }
-                    },
-                    data: body
-                }
-            })
-        )
-    })
-}
+const upload = async (reqBody) => {
+    let body = JSON.stringify(reqBody);
+    let formData = new FormData();
+    formData.append('file', fs.createReadStream('./panda.pdf'), {
+        'filename': 'panda.pdf'
+    });
+    formData.append('data', body);
+
+    try {
+        let response = await axiosInstance.post('https://api.pandadoc.com/public/v1/documents/', formData, {
+            headers: {
+                'Authorization': `Bearer ${access_token}`,
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+
+        return response.data;
+    } catch (error) {
+        console.log("Error Occured at the upload function")
+        throw error;
+    }
+};
 
 const create = async (result) => {
-    let id = await docOwner(result)
-        .then(docOwner => requestBody(docOwner, result))
-        .then(dataa => upload(dataa))
-        .then(res => JSON.parse(res))
-        .then((details) => details.id)
-        .catch(error => {
-            console.log(error);
-        });
-    return id
+    let owner = await docOwner(result);
+    let reqBod = await requestBody(result, owner);
+    let newDoc = await upload(reqBod);
+    let id = await newDoc.id
+    return {id, owner}
 }
 
 module.exports = create;
